@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.howdyitskyle.weathering",
   "name": "Weathering",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "howdyitskyle",
   "license": "MIT",
   "description": "A weather widget for the Omarchy bar: current conditions, UV, pressure, wind direction, hourly and 7-day forecast, air quality, and sun/moon times in one panel.",
@@ -23,7 +23,12 @@
       "unit": "auto",
       "refreshMinutes": 15,
       "showHourly": true,
-      "showAirQuality": true
+      "showAirQuality": true,
+      "showMetrics": true,
+      "showSun": true,
+      "show7day": true,
+      "showFeelsLike": true,
+      "hourlyCells": 6
     },
     "schema": [
       {
@@ -54,6 +59,43 @@
         "type": "boolean",
         "label": "Show air quality",
         "defaultValue": true
+      },
+      {
+        "key": "showMetrics",
+        "type": "boolean",
+        "label": "Show metrics grid",
+        "description": "Show the METRICS grid (wind, humidity, pressure, UV).",
+        "defaultValue": true
+      },
+      {
+        "key": "showSun",
+        "type": "boolean",
+        "label": "Show sun times",
+        "description": "Show the sun rise/set cell in the metrics grid.",
+        "defaultValue": true
+      },
+      {
+        "key": "show7day",
+        "type": "boolean",
+        "label": "Show 7-day forecast",
+        "defaultValue": true
+      },
+      {
+        "key": "showFeelsLike",
+        "type": "boolean",
+        "label": "Show feels-like",
+        "description": "Show the feels-like stat in the header.",
+        "defaultValue": true
+      },
+      {
+        "key": "hourlyCells",
+        "type": "integer",
+        "label": "Hourly cells",
+        "min": 3,
+        "max": 12,
+        "step": 1,
+        "defaultValue": 6,
+        "description": "How many hourly forecast cells to show (3-12)."
       }
     ]
   }

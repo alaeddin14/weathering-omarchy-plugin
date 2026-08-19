@@ -140,6 +140,12 @@ Panel {
   // Feature toggles.
   readonly property bool showHourly: setting("showHourly", true) !== false
   readonly property bool showAirQuality: setting("showAirQuality", true) !== false
+  readonly property bool showMetrics: setting("showMetrics", true) !== false
+  readonly property bool showSun: setting("showSun", true) !== false
+  readonly property bool show7day: setting("show7day", true) !== false
+  readonly property bool showFeelsLike: setting("showFeelsLike", true) !== false
+  // How many hourly cells to render; clamped so a bad value can't break layout.
+  readonly property int hourlyCells: Math.max(3, Math.min(12, parseInt(setting("hourlyCells", 6), 10) || 6))
 
   readonly property string reportLocation: configuredLocation || wttrLocation || (areaInfo && areaInfo.areaName && areaInfo.areaName[0] ? areaInfo.areaName[0].value : "")
   readonly property string reportTempNum: current ? String(useImperial ? current.temp_F : current.temp_C) : ""
@@ -735,6 +741,7 @@ KeyboardPanel {
                 spacing: Style.space(36)
 
                 Column {
+                  visible: root.showFeelsLike
                   spacing: Style.space(5)
                   Text {
                     text: "FEELS"
@@ -911,7 +918,7 @@ KeyboardPanel {
 
                 Repeater {
                   id: hourRepeater
-                  model: root.hourly.length > 6 ? root.hourly.slice(0, 6) : root.hourly
+                  model: root.hourly.length > root.hourlyCells ? root.hourly.slice(0, root.hourlyCells) : root.hourly
 
                   Item {
                     required property var modelData
@@ -972,7 +979,7 @@ KeyboardPanel {
           // ---- METRICS ----------------------------------------------------
 
           Column {
-            visible: !!root.openMeteoCurrent
+            visible: root.showMetrics && !!root.openMeteoCurrent
             width: parent.width
             spacing: Style.space(8)
 
@@ -1120,7 +1127,7 @@ KeyboardPanel {
                 height: root.metricCellHeight
                 radius: Math.min(4, Style.cornerRadius)
                 color: Qt.rgba(root.bar.foreground.r, root.bar.foreground.g, root.bar.foreground.b, 0.05)
-                visible: root.reportSunrise !== "" && root.reportSunset !== ""
+                visible: root.showSun && root.reportSunrise !== "" && root.reportSunset !== ""
 
                 Column {
                   anchors.left: parent.left
@@ -1180,7 +1187,7 @@ KeyboardPanel {
           // ---- 7-DAY FORECAST ---------------------------------------------
 
           Column {
-            visible: root.daily.length > 0
+            visible: root.show7day && root.daily.length > 0
             width: parent.width
             spacing: Style.space(8)
 

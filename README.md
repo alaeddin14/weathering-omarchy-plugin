@@ -77,10 +77,16 @@ from your IP address.
 | `refreshMinutes` | `15` | refresh interval, 5–120 min |
 | `showHourly` | `true` | show the hourly strip |
 | `showAirQuality` | `true` | show the air-quality section |
+| `showMetrics` | `true` | show the METRICS grid (wind, humidity, pressure, UV) |
+| `showSun` | `true` | show the sun rise/set cell in the metrics grid |
+| `show7day` | `true` | show the 7-day forecast strip |
+| `showFeelsLike` | `true` | show the feels-like stat in the header |
+| `hourlyCells` | `6` | number of hourly forecast cells to show (3–12) |
 
 Settings are inline on the widget's bar-layout entry in
 `~/.config/omarchy/shell.json`. For example, to force imperial units, refresh
-every 10 minutes, and hide the air-quality section, add the keys to the entry:
+every 10 minutes, hide the air-quality section, and show only 4 hourly cells,
+add the keys to the entry:
 
 ```json
 {
@@ -94,7 +100,8 @@ every 10 minutes, and hide the air-quality section, add the keys to the entry:
           "id": "io.github.howdyitskyle.weathering",
           "unit": "imperial",
           "refreshMinutes": 10,
-          "showAirQuality": false
+          "showAirQuality": false,
+          "hourlyCells": 4
         }
       ]
     }

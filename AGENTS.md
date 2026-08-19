@@ -81,7 +81,8 @@ self-corrects a first-read race.
 Read from the bar layout entry in `~/.config/omarchy/shell.json` via `setting(key,
 default)` — settings are inline on the entry, no per-plugin config file. Keys and
 defaults come from the manifest `barWidget.schema`/`defaults` (`unit`, `refreshMinutes`,
-`showHourly`, `showAirQuality`).
+`showHourly`, `showAirQuality`, `showMetrics`, `showSun`, `show7day`,
+`showFeelsLike`, `hourlyCells`).
 
 ## Dev loop
 
