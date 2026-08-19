@@ -84,6 +84,9 @@ Panel {
     forecastProc.running = false
     dailyForecastProc.running = false
     airQualityProc.running = false
+    forecastRetryTimer.stop()
+    dailyForecastRetryTimer.stop()
+    airQualityRetryTimer.stop()
     Qt.callLater(refresh)
   }
 
@@ -210,7 +213,15 @@ Panel {
     forecastRetries = 0
     dailyForecastRetries = 0
     airQualityRetries = 0
-    if (!forecastProc.running) forecastProc.running = true
+    // Cancel any pending retries so a refresh can't stack stale requests on
+    // top of a fresh cycle.
+    forecastRetryTimer.stop()
+    dailyForecastRetryTimer.stop()
+    airQualityRetryTimer.stop()
+    // wttr.in's full j1 fetch only serves the no-coordinates (IP auto-detect)
+    // path — with configured coordinates Open-Meteo is authoritative, so skip
+    // the extra external request entirely.
+    if (!root.hasConfiguredCoordinates && !forecastProc.running) forecastProc.running = true
     if (root.locationQuery === "" && !locationProc.running) locationProc.running = true
     refreshDailyForecast(null)
   }
@@ -242,7 +253,7 @@ Panel {
     dailyForecastProc.command = ["curl", "-fsS", "--max-time", "5", url]
     dailyForecastProc.running = true
 
-    refreshAirQuality(lat, lon)
+    if (root.showAirQuality) refreshAirQuality(lat, lon)
   }
 
   function refreshAirQuality(lat, lon) {
@@ -435,7 +446,7 @@ Panel {
     id: airQualityRetryTimer
     interval: 2500
     onTriggered: {
-      if (!isNaN(root.lastLat) && !isNaN(root.lastLon)) root.refreshAirQuality(root.lastLat, root.lastLon)
+      if (root.showAirQuality && !isNaN(root.lastLat) && !isNaN(root.lastLon)) root.refreshAirQuality(root.lastLat, root.lastLon)
     }
   }
 
