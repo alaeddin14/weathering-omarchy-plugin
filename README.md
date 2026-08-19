@@ -81,7 +81,7 @@ from your IP address.
 | `showSun` | `true` | show the sun rise/set cell in the metrics grid |
 | `show7day` | `true` | show the 7-day forecast strip |
 | `showFeelsLike` | `true` | show the feels-like stat in the header |
-| `hourlyCells` | `6` | number of hourly forecast cells to show (3–12) |
+| `hourlyCells` | `6` | number of hourly forecast cells to show (3–6) |
 
 Settings are inline on the widget's bar-layout entry in
 `~/.config/omarchy/shell.json`. For example, to force imperial units, refresh

@@ -92,10 +92,10 @@
         "type": "integer",
         "label": "Hourly cells",
         "min": 3,
-        "max": 12,
+        "max": 6,
         "step": 1,
         "defaultValue": 6,
-        "description": "How many hourly forecast cells to show (3-12)."
+        "description": "How many hourly forecast cells to show (3-6)."
       }
     ]
   }

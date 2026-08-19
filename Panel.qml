@@ -145,7 +145,7 @@ Panel {
   readonly property bool show7day: setting("show7day", true) !== false
   readonly property bool showFeelsLike: setting("showFeelsLike", true) !== false
   // How many hourly cells to render; clamped so a bad value can't break layout.
-  readonly property int hourlyCells: Math.max(3, Math.min(12, parseInt(setting("hourlyCells", 6), 10) || 6))
+  readonly property int hourlyCells: Math.max(3, Math.min(6, parseInt(setting("hourlyCells", 6), 10) || 6))
 
   readonly property string reportLocation: configuredLocation || wttrLocation || (areaInfo && areaInfo.areaName && areaInfo.areaName[0] ? areaInfo.areaName[0].value : "")
   readonly property string reportTempNum: current ? String(useImperial ? current.temp_F : current.temp_C) : ""
