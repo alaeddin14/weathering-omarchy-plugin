@@ -73,6 +73,36 @@ from your IP address.
 | `showHourly` | `true` | show the hourly strip |
 | `showAirQuality` | `true` | show the air-quality section |
 
+Settings are inline on the widget's bar-layout entry in
+`~/.config/omarchy/shell.json`. For example, to force imperial units, refresh
+every 10 minutes, and hide the air-quality section, add the keys to the entry:
+
+```json
+{
+  "bar": {
+    "layout": {
+      "center": [
+        {
+          "id": "omarchy.clock"
+        },
+        {
+          "id": "io.github.howdyitskyle.weathering",
+          "unit": "imperial",
+          "refreshMinutes": 10,
+          "showAirQuality": false
+        }
+      ]
+    }
+  }
+}
+```
+
+The entry lives wherever you placed the widget (in the example above, in the
+bar's `center` layout, next to the clock). `shell.json` hot-reloads on save, so
+no restart is needed — the change takes effect immediately. You can also set
+these from the settings form in `omarchy bar` rather than editing the file by
+hand.
+
 ## Data
 
 Weather + geocoding come from Open-Meteo's free APIs (`api.open-meteo.com`,
