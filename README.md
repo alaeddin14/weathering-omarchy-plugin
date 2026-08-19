@@ -29,6 +29,14 @@ locale).
 omarchy plugin add https://github.com/howdyitskyle/weathering-omarchy-plugin.git --enable
 ```
 
+`omarchy plugin add` installs safely: it clones the repo to a temporary
+folder, **validates the `manifest.json`** against Omarchy's plugin schema, and
+refuses to add anything invalid. It also refuses to overwrite an existing
+install — if the plugin id is already in use, it stops and tells you to use
+`omarchy plugin update` instead. Only after validation does it move the plugin
+into `~/.config/omarchy/plugins/<id>/` and (with `--enable`) ask where to place
+the bar pill.
+
 Then move it where you like on the bar (it lands in the right section by
 default):
 
@@ -78,6 +86,21 @@ closed) so the bar pill stays current.
 ```sh
 omarchy plugin remove io.github.howdyitskyle.weathering
 ```
+
+Removal is safe. Omarchy first disables and unloads the plugin from the
+running `omarchy-shell`, then — because a git-installed plugin's source lives
+upstream — it deletes the local copy. If you instead installed the folder
+manually (no git repo), the folder is **backed up** to
+`~/.config/omarchy/plugins/.io.github.howdyitskyle.weathering.bak.<timestamp>`
+rather than deleted, so you can recover it if needed.
+
+## Security
+
+Omarchy plugins run as **unsandboxed code** inside your long-lived
+`omarchy-shell` process, with your user's permissions. Only install plugins you
+trust, and review the source before enabling. This plugin only reads weather
+data from Open-Meteo over HTTPS and shares your location via
+`omarchy-weather-location` — it does not ship or run any external scripts.
 
 ## License
 
