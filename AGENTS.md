@@ -40,7 +40,8 @@ permissions.
   `python3 test/glyph-coverage.py`; use `--find <name>` to look a glyph up.
 - `PanelCard.qml`, `Stat.qml` — legacy card components from the old card-style
   layout; no longer referenced by `Panel.qml`, kept for reference only.
-- `README.md`, `LICENSE`, `weathering.png` — publishing.
+- `README.md`, `LICENSE`, `preview.png` — publishing. `preview.png` in the repo
+  root doubles as the marketplace listing preview.
 
 ## Data
 

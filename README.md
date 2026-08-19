@@ -6,7 +6,7 @@ bar; one panel with a sectioned layout: a current-conditions hero, metric cells
 7-day forecast. Weather data comes from [Open-Meteo](https://open-meteo.com)
 and [wttr.in](https://wttr.in) — no API key, no account.
 
-<p align="center"><img src="weathering.png" alt="Weathering panel" width="520"></p>
+<p align="center"><img src="preview.png" alt="Weathering panel" width="520"></p>
 
 ## Features
 
