@@ -203,7 +203,10 @@ Panel {
   readonly property string reportWindUnit: useImperial ? "mph" : "km/h"
   readonly property string reportWindDirName: openMeteoCurrent ? Model.windDirectionName(openMeteoCurrent.windDirection) : ""
   readonly property real windDeg: openMeteoCurrent && isFinite(Number(openMeteoCurrent.windDirection)) ? Number(openMeteoCurrent.windDirection) : -1
-  readonly property real pressureLevel: openMeteoCurrent && openMeteoCurrent.pressureMb !== "" ? Math.max(0, Math.min(1, (Number(openMeteoCurrent.pressureMb) - 872) / (1080 - 872))) : -1
+  // Pressure mapped to a 0..1 bar over the practical 950-1050 hPa span, so a
+  // "Normal" reading (~1013 hPa) sits mid-bar and agrees with the Low/Normal/
+  // High label rather than near-full (the old all-time-extremes 872-1080 range).
+  readonly property real pressureLevel: openMeteoCurrent && openMeteoCurrent.pressureMb !== "" ? Math.max(0, Math.min(1, (Number(openMeteoCurrent.pressureMb) - 950) / (1050 - 950))) : -1
   readonly property real humidityLevel: openMeteoCurrent && openMeteoCurrent.humidity !== "" ? (Number(openMeteoCurrent.humidity) / 100) : -1
   readonly property real uvLevel: todayExtra && todayExtra.uv !== null && isFinite(todayExtra.uv) ? Math.max(0, Math.min(1, todayExtra.uv / 12)) : -1
   readonly property string hourlyMax: Model.hourlyMaxTemp(hourly, useImperial)
@@ -1034,6 +1037,7 @@ KeyboardPanel {
                 desc: root.openMeteoCurrent && root.openMeteoCurrent.humidity !== "" ? (root.openMeteoCurrent.humidity + "%") : ""
                 valuePixelSize: Style.font.body
                 barLevel: root.humidityLevel
+                barColor: Util.alpha(Color.accent, 0.85)
               }
             }
 
@@ -1052,7 +1056,7 @@ KeyboardPanel {
                 desc: root.openMeteoCurrent && root.openMeteoCurrent.pressureMb !== "" ? (root.openMeteoCurrent.pressureMb + " hPa") : ""
                 valuePixelSize: Style.font.body
                 barLevel: root.pressureLevel
-                barColor: Util.alpha(Color.accent, 0.6)
+                barColor: Util.alpha(Color.accent, 0.85)
               }
 
               MetricCard {
