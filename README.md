@@ -21,7 +21,8 @@ API key, no account.
 
 The panel uses the theme's popup surface, so it follows dark and light themes.
 Everything is metric or imperial aware (auto / metric / imperial, or per your
-locale).
+locale). The hourly strip and air-quality section can be hidden via the
+`showHourly` and `showAirQuality` settings (see [Configure](#configure)).
 
 ## Install
 
@@ -47,11 +48,15 @@ omarchy bar move io.github.howdyitskyle.weathering --section center
 ## Use
 
 Click the pill to open or close the panel. Press Escape to close it. Middle-click
-refreshes; right-click sends the current conditions as a notification.
+refreshes; right-click sends the current conditions as a notification. Inside
+the panel, click the location label (top right) to search for a city; pressing
+Escape or committing an empty search returns to automatic IP-based location.
 
-Bind a key if you like:
+Bind a key if you like, in `~/.config/hypr/bindings.lua` (Hyprland's
+bindings file — `bindd` is a superkey chord binding, so this one is
+`SUPER + CTRL + W`):
 
-```
+```lua
 bindd = SUPER CTRL, W, Weathering, exec, omarchy-shell shell toggle io.github.howdyitskyle.weathering '{}'
 ```
 
