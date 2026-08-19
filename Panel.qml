@@ -967,7 +967,10 @@ KeyboardPanel {
                       }
                       Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: (useImperial ? modelData.tempF : modelData.tempC) + "°"
+                        // The NOW cell mirrors the hero's live reading (current
+                        // block) so the two never disagree; the rest use the
+                        // hourly forecast.
+                        text: index === 0 && root.reportTempNum !== "" ? root.reportTempNum + "°" : (useImperial ? modelData.tempF : modelData.tempC) + "°"
                         color: root.bar.foreground
                         font.family: root.bar.fontFamily
                         font.pixelSize: Style.font.body
@@ -1026,9 +1029,10 @@ KeyboardPanel {
                 foreground: root.bar.foreground
                 fontFamily: root.bar.fontFamily
                 label: "Humidity"
-                value: root.openMeteoCurrent && root.openMeteoCurrent.humidity !== "" ? root.openMeteoCurrent.humidity : "—"
-                unit: root.openMeteoCurrent && root.openMeteoCurrent.humidity !== "" ? "%" : ""
-                desc: root.openMeteoCurrent ? Model.humidityLabel(root.openMeteoCurrent.humidity) : ""
+                value: root.openMeteoCurrent ? Model.humidityLabel(root.openMeteoCurrent.humidity) : "—"
+                unit: ""
+                desc: root.openMeteoCurrent && root.openMeteoCurrent.humidity !== "" ? (root.openMeteoCurrent.humidity + "%") : ""
+                valuePixelSize: Style.font.body
                 barLevel: root.humidityLevel
               }
             }
@@ -1043,9 +1047,10 @@ KeyboardPanel {
                 foreground: root.bar.foreground
                 fontFamily: root.bar.fontFamily
                 label: "Pressure"
-                value: root.openMeteoCurrent && root.openMeteoCurrent.pressureMb !== "" ? root.openMeteoCurrent.pressureMb : "—"
-                unit: root.openMeteoCurrent && root.openMeteoCurrent.pressureMb !== "" ? "hPa" : ""
-                desc: root.openMeteoCurrent ? Model.pressureLabel(root.openMeteoCurrent.pressureMb) : ""
+                value: root.openMeteoCurrent ? Model.pressureLabel(root.openMeteoCurrent.pressureMb) : "—"
+                unit: ""
+                desc: root.openMeteoCurrent && root.openMeteoCurrent.pressureMb !== "" ? (root.openMeteoCurrent.pressureMb + " hPa") : ""
+                valuePixelSize: Style.font.body
                 barLevel: root.pressureLevel
                 barColor: Util.alpha(Color.accent, 0.6)
               }
@@ -1056,9 +1061,10 @@ KeyboardPanel {
                 foreground: root.bar.foreground
                 fontFamily: root.bar.fontFamily
                 label: "UV"
-                value: root.todayExtra && root.uv ? String(Math.round(root.todayExtra.uv)) : "—"
+                value: root.uv ? root.uv.label : "—"
                 unit: ""
-                desc: root.uv ? root.uv.label : ""
+                desc: root.todayExtra && root.uv ? String(Math.round(root.todayExtra.uv)) : ""
+                valuePixelSize: Style.font.body
                 barLevel: root.uvLevel
                 barColor: Util.alpha(Color.accent, 0.85)
               }

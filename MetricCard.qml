@@ -26,6 +26,8 @@ Rectangle {
   // direction the wind comes FROM, matching the desc label (e.g. "South").
   property real arrowAngle: -1
   property real pad: Style.space(10)
+  // Right-side value font size; overridable so a card can match its neighbours.
+  property int valuePixelSize: Style.font.title
 
   radius: Math.min(4, Style.cornerRadius)
   color: Qt.rgba(card.foreground.r, card.foreground.g, card.foreground.b, 0.05)
@@ -89,7 +91,7 @@ Rectangle {
           text: card.value
           color: card.foreground
           font.family: card.fontFamily
-          font.pixelSize: Style.font.title
+          font.pixelSize: card.valuePixelSize
           font.bold: true
         }
 
