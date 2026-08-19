@@ -44,7 +44,7 @@ permissions.
 
 ## Data
 
-All from Open-Meteo (no API key):
+All from free, keyless services:
 
 - `api.open-meteo.com/v1/forecast` — current + hourly + daily (sunrise/sunset,
   uv_index_max, precipitation_probability_max); `forecast_days=8`, `timezone=auto`.

@@ -3,8 +3,8 @@
 A weather widget for the [Omarchy](https://omarchy.org) bar. One pill in the
 bar; one panel with a sectioned layout: a current-conditions hero, metric cells
 (wind, humidity, pressure, UV index, air quality, sun), an hourly strip, and a
-7-day forecast. All data comes from [Open-Meteo](https://open-meteo.com) — no
-API key, no account.
+7-day forecast. Weather data comes from [Open-Meteo](https://open-meteo.com)
+and [wttr.in](https://wttr.in) — no API key, no account.
 
 <p align="center"><img src="weathering.png" alt="Weathering panel" width="520"></p>
 
@@ -117,11 +117,18 @@ hand.
 
 ## Data
 
-Weather + geocoding come from Open-Meteo's free APIs (`api.open-meteo.com`,
-`air-quality-api.open-meteo.com`, `geocoding-api.open-meteo.com`). There is no
-account, key, or rate plan. The panel fetches on open, on location change, and
-on a refresh timer that runs every `refreshMinutes` (even while the panel is
-closed) so the bar pill stays current.
+Most data comes from Open-Meteo's free APIs (`api.open-meteo.com`,
+`air-quality-api.open-meteo.com`, `geocoding-api.open-meteo.com`): the daily
+forecast (hourly strip + 7-day), current conditions, air quality, and city
+search. **wttr.in** (`wttr.in`) is also used — it provides current conditions
+when no location is configured (IP auto-detection) and the current-condition
+fallback, and it answers the IP auto-location query. There is no account, key,
+or rate plan for either service.
+
+The panel fetches on open, on location change, and on a refresh timer that
+runs every `refreshMinutes` (even while the panel is closed) so the bar pill
+stays current. When a location is configured, the Open-Meteo forecast is the
+authoritative current-condition source; without one, wttr.in fills the hero.
 
 ## Remove
 
@@ -140,8 +147,8 @@ rather than deleted, so you can recover it if needed.
 
 Omarchy plugins run as **unsandboxed code** inside your long-lived
 `omarchy-shell` process, with your user's permissions. Only install plugins you
-trust, and review the source before enabling. This plugin only reads weather
-data from Open-Meteo over HTTPS and shares your location via
+trust, and review the source before enabling. This plugin reads weather data
+from Open-Meteo and wttr.in over HTTPS and shares your location via
 `omarchy-weather-location` — it does not ship or run any external scripts.
 
 ## License
