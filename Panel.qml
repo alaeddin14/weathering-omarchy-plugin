@@ -169,7 +169,9 @@ Panel {
   readonly property var uv: (todayExtra && todayExtra.uv !== null && isFinite(todayExtra.uv)) ? Model.uvInfo(todayExtra.uv) : null
   
   // Forecast + air quality.
-  readonly property var hourly: Model.hourlyForecast(dailyForecastReport, Qt.formatDateTime(new Date(), "yyyy-MM-ddThh:mm"))
+  // Hours between strip cells; 2 means the six cells cover half a day.
+  readonly property int hourlyStep: Math.max(1, Math.min(6, parseInt(setting("hourlyStep", 2), 10) || 2))
+  readonly property var hourly: Model.hourlyForecast(dailyForecastReport, Qt.formatDateTime(new Date(), "yyyy-MM-ddThh:mm"), root.hourlyStep)
   readonly property var daily: Model.dailyForecast(dailyForecastReport, Qt.formatDate(new Date(), "yyyy-MM-dd"))
   readonly property var airQuality: Model.aqiSummary(airQualityReport)
   readonly property bool hasAirQuality: airQuality !== null
@@ -211,6 +213,111 @@ Panel {
   readonly property real uvLevel: todayExtra && todayExtra.uv !== null && isFinite(todayExtra.uv) ? Math.max(0, Math.min(1, todayExtra.uv / 12)) : -1
   readonly property string hourlyMax: Model.hourlyMaxTemp(hourly, useImperial)
 
+  // ---- Condition color ---------------------------------------------------
+  // The bar reads glyphColor and barTemp off this panel, so the bar pill and
+  // the hero always show the same condition and the same color.
+  readonly property bool colorIcon: setting("colorIcon", true) !== false
+  // Themes are not tagged light or dark; the surface itself is the only
+  // reliable signal, and the palette needs to know which side it lands on.
+  readonly property bool backgroundIsLight: Color.background.hslLightness > 0.5
+  readonly property string conditionColorName: root.colorIcon ? Model.currentConditionColor(root.current, root.backgroundIsLight) : ""
+  readonly property color themeForeground: root.bar ? root.bar.foreground : Color.foreground
+  readonly property color glyphColor: root.conditionColorName !== "" ? root.conditionColorName : root.themeForeground
+
+  // Bar temperature: rounded, no unit suffix — the degree sign carries it and
+  // bar width is scarce. Empty until the first successful fetch.
+  readonly property string barTemp: root.reportTempNum !== "" ? root.reportTempNum + "\u00b0" : ""
+
+  // ---- NWS alerts --------------------------------------------------------
+  readonly property bool showAlerts: setting("showAlerts", true) !== false
+  readonly property bool alertNotifications: setting("alertNotifications", true) !== false
+  // Alerts are time-critical in a way the forecast is not, so they poll on
+  // their own clock rather than riding refreshMinutes (default 15).
+  readonly property int alertsMinutes: Math.max(1, Math.min(30, parseInt(setting("alertsMinutes", 5), 10) || 5))
+
+  property var alerts: []
+  readonly property int alertRank: Model.topAlertRank(root.alerts)
+  readonly property bool alertUrgent: root.showAlerts && Model.hasUrgentAlert(root.alerts)
+  readonly property bool hasAlerts: root.showAlerts && root.alerts.length > 0
+
+  // Ids already notified for. Primed on the first successful fetch so a shell
+  // restart during an active warning does not re-announce it.
+  property var seenAlertIds: ({})
+  property bool alertsPrimed: false
+
+  function refreshAlerts() {
+    if (!root.showAlerts || alertsProc.running) return
+    if (isNaN(root.lastLat) || isNaN(root.lastLon)) return
+    alertsProc.command = ["curl", "-fsS", "--max-time", "5",
+      "-H", "User-Agent: " + root.nwsUserAgent,
+      "https://api.weather.gov/alerts/active?point=" + encodeURIComponent(root.lastLat + "," + root.lastLon)]
+    alertsProc.running = true
+  }
+
+  function applyAlerts(parsed) {
+    // null means the fetch or parse failed. Keep whatever is on screen: a
+    // stale warning is far less harmful than one cleared by a dropped packet.
+    if (parsed === null) return
+
+    if (root.alertsPrimed && root.alertNotifications) {
+      for (var i = 0; i < parsed.length; i++) {
+        var alert = parsed[i]
+        if (!Model.alertIsNotifiable(alert) || root.seenAlertIds[alert.id]) continue
+        root.notifyAlert(alert)
+      }
+    }
+
+    var seen = {}
+    for (var j = 0; j < parsed.length; j++) seen[parsed[j].id] = true
+    root.seenAlertIds = seen
+    root.alerts = parsed
+    root.alertsPrimed = true
+  }
+
+  function notifyAlert(alert) {
+    if (!root.bar) return
+    var urgency = alert.rank >= 4 ? "critical" : "normal"
+    var detail = alert.headline || Model.alertEndsLabel(alert.ends, new Date())
+    root.bar.run("omarchy-notification-send -u " + urgency + " -g 󰀦 "
+      + Model.shellQuote(alert.event) + " " + Model.shellQuote(detail))
+  }
+
+  // ---- Radar -------------------------------------------------------------
+  // NWS RIDGE II serves a ready-made animated loop per radar station, so the
+  // whole feature is a URL and an mpv window. The station is resolved once
+  // from the location's coordinates; the setting overrides it when set, and
+  // nothing station-specific is committed to this repository.
+  readonly property string radarStationSetting: Model.normalizedRadarStation(setting("radarStation", ""))
+  property string resolvedRadarStation: ""
+  readonly property string radarStation: radarStationSetting || resolvedRadarStation
+  readonly property string radarUrl: Model.radarLoopUrl(radarStation)
+  readonly property bool radarAvailable: radarUrl !== ""
+
+  function resolveRadarStation(lat, lon) {
+    if (radarStationSetting !== "" || resolvedRadarStation !== "") return
+    if (radarStationProc.running || isNaN(lat) || isNaN(lon)) return
+    // -L because api.weather.gov 301s coordinates to its own reduced precision.
+    radarStationProc.command = ["curl", "-fsSL", "--max-time", "5",
+      "-H", "User-Agent: " + root.nwsUserAgent,
+      "https://api.weather.gov/points/" + encodeURIComponent(lat + "," + lon)]
+    radarStationProc.running = true
+  }
+
+  function openRadar() {
+    if (!root.bar) return
+    if (!root.radarAvailable) {
+      root.bar.run("omarchy-notification-send -g 󰐷 'Weather radar' 'No radar station for this location yet. Set one in the widget settings, or wait for the forecast to load.'")
+      return
+    }
+    root.bar.run("mpv --loop-file=inf --no-terminal --force-window=yes"
+      + " --title='Weather Radar " + root.radarStation + "'"
+      + " '" + root.radarUrl + "'")
+  }
+
+  // NWS asks unauthenticated clients to identify themselves. Plugin identity
+  // only — no address, no hostname.
+  readonly property string nwsUserAgent: "omarchy-weathering-plugin (github.com/alaeddin14/weathering-omarchy-plugin)"
+
 
   function refresh() {
     forecastRetries = 0
@@ -244,6 +351,8 @@ Panel {
 
     root.lastLat = lat
     root.lastLon = lon
+    root.resolveRadarStation(lat, lon)
+    root.refreshAlerts()
 
     var url = "https://api.open-meteo.com/v1/forecast"
       + "?latitude=" + encodeURIComponent(String(lat))
@@ -382,6 +491,17 @@ Panel {
     return Model.iconForOpenMeteoCode(code, night)
   }
 
+  function colorForOpenMeteoCode(code, night) {
+    if (!root.colorIcon) return root.themeForeground
+    var c = Model.colorForOpenMeteoCode(code, night, root.backgroundIsLight)
+    return c !== "" ? c : root.themeForeground
+  }
+
+  function severityColor(level) {
+    var c = Model.severityColor(level, root.backgroundIsLight)
+    return c !== "" ? c : root.themeForeground
+  }
+
   Process {
     id: forecastProc
     command: ["curl", "-fsS", "--max-time", "10", "https://wttr.in/" + root.locationQuery + "?format=j1"]
@@ -475,6 +595,33 @@ Panel {
           root.scheduleDailyForecastRetry()
         }
       }
+    }
+  }
+
+  Process {
+    id: alertsProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyAlerts(Model.parseAlerts(String(text || "")))
+    }
+  }
+
+  Timer {
+    id: alertsTimer
+    interval: root.alertsMinutes * 60 * 1000
+    running: root.showAlerts
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.refreshAlerts()
+  }
+
+  Process {
+    id: radarStationProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      // No retry: a missing station is not an error worth chasing, and the
+      // next forecast refresh calls resolveRadarStation again anyway.
+      onStreamFinished: root.resolvedRadarStation = Model.parseRadarStation(String(text || ""))
     }
   }
 
@@ -605,6 +752,76 @@ KeyboardPanel {
           width: weatherScroll.width
           spacing: Style.space(18)
 
+          // ---- Alerts: above the hero, because a tornado warning outranks
+          //      the temperature. Hidden entirely when nothing is active.
+          Column {
+            width: parent.width
+            spacing: Style.space(8)
+            visible: root.hasAlerts
+
+            Repeater {
+              model: root.hasAlerts ? root.alerts.slice(0, 4) : []
+
+              Rectangle {
+                width: weatherColumn.width - Style.space(32)
+                x: Style.space(16)
+                implicitHeight: alertText.implicitHeight + Style.space(20)
+                radius: Style.cornerRadius
+                // Severe and above borrow the theme's urgent color; lower
+                // severities stay on the foreground wash used by every other
+                // card, so a watch never looks like a warning.
+                color: Model.alertIsUrgent(modelData)
+                  ? Util.alpha(Color.urgent, 0.18)
+                  : Qt.rgba(root.bar.foreground.r, root.bar.foreground.g, root.bar.foreground.b, 0.05)
+                border.width: Model.alertIsUrgent(modelData) ? 1 : 0
+                border.color: Util.alpha(Color.urgent, 0.55)
+
+                Row {
+                  id: alertText
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.leftMargin: Style.space(12)
+                  anchors.rightMargin: Style.space(12)
+                  spacing: Style.space(10)
+
+                  Text {
+                    text: "󰀦"
+                    color: Model.alertIsUrgent(modelData) ? Color.urgent : root.dimText
+                    font.family: root.bar.fontFamily
+                    font.pixelSize: Style.font.icon
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  Column {
+                    width: parent.width - parent.spacing - Style.space(20)
+                    spacing: Style.space(2)
+
+                    Text {
+                      text: (modelData.event || "").toUpperCase()
+                      color: Model.alertIsUrgent(modelData) ? Color.urgent : root.bar.foreground
+                      font.family: root.bar.fontFamily
+                      font.pixelSize: Style.font.body
+                      font.letterSpacing: root.capsLetterSpacing
+                      elide: Text.ElideRight
+                      width: parent.width
+                    }
+
+                    Text {
+                      visible: text !== ""
+                      text: Model.alertEndsLabel(modelData.ends, new Date())
+                      color: root.dimText
+                      font.family: root.bar.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                      elide: Text.ElideRight
+                      width: parent.width
+                    }
+                  }
+                }
+              }
+            }
+          }
+
           // ---- Hero: big glyph + temp on the left; location + FEELS/WIND/PRECIP
           //      stats on the right, matching the built-in weather plugin.
           Item {
@@ -623,7 +840,7 @@ KeyboardPanel {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: 5
                 text: root.label || "—"
-                color: root.bar.foreground
+                color: root.glyphColor
                 font.family: root.bar.fontFamily
                 font.pixelSize: 64
               }
@@ -678,6 +895,32 @@ KeyboardPanel {
                 Text {
                   text: (root.reportLocation || "").toUpperCase()
                   color: root.dimText
+                  font.family: root.bar.fontFamily
+                  font.pixelSize: Style.font.body
+                  font.letterSpacing: root.capsLetterSpacing
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+
+              Row {
+                id: radarAction
+                visible: !root.editingLocation && root.radarAvailable
+                spacing: Style.space(6)
+
+                TapHandler { onTapped: root.openRadar() }
+                HoverHandler { id: radarHover; cursorShape: Qt.PointingHandCursor }
+
+                Text {
+                  text: "󰐷"
+                  color: radarHover.hovered ? root.bar.foreground : root.dimText
+                  font.family: root.bar.fontFamily
+                  font.pixelSize: Style.font.body
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                  text: "RADAR"
+                  color: radarHover.hovered ? root.bar.foreground : root.dimText
                   font.family: root.bar.fontFamily
                   font.pixelSize: Style.font.body
                   font.letterSpacing: root.capsLetterSpacing
@@ -958,15 +1201,15 @@ KeyboardPanel {
                         text: index === 0 ? "NOW" : modelData.time
                         color: index === 0 ? root.bar.foreground : root.dimText
                         font.family: root.bar.fontFamily
-                        font.pixelSize: Style.font.caption
+                        font.pixelSize: Style.font.title
                         font.bold: index === 0
                       }
                       Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: root.iconForOpenMeteoCode(modelData.code, modelData.night)
-                        color: root.bar.foreground
+                        color: root.colorForOpenMeteoCode(modelData.code, modelData.night)
                         font.family: root.bar.fontFamily
-                        font.pixelSize: Style.font.title
+                        font.pixelSize: Style.font.iconLarge
                       }
                       Text {
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -976,7 +1219,7 @@ KeyboardPanel {
                         text: index === 0 && root.reportTempNum !== "" ? root.reportTempNum + "°" : (useImperial ? modelData.tempF : modelData.tempC) + "°"
                         color: root.bar.foreground
                         font.family: root.bar.fontFamily
-                        font.pixelSize: Style.font.body
+                        font.pixelSize: Style.font.title
                       }
                       Text {
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -984,7 +1227,7 @@ KeyboardPanel {
                         text: modelData.precipProb !== "" ? (modelData.precipProb + "%") : ""
                         color: root.dimText
                         font.family: root.bar.fontFamily
-                        font.pixelSize: Style.font.caption
+                        font.pixelSize: Style.font.bodySmall
                       }
                     }
                   }
@@ -1070,7 +1313,8 @@ KeyboardPanel {
                 desc: root.todayExtra && root.uv ? String(Math.round(root.todayExtra.uv)) : ""
                 valuePixelSize: Style.font.body
                 barLevel: root.uvLevel
-                barColor: Util.alpha(Color.accent, 0.85)
+                barColor: root.uv ? Util.alpha(root.severityColor(root.uv.level), 0.9) : Util.alpha(Color.accent, 0.85)
+                valueColor: root.uv ? root.severityColor(root.uv.level) : root.themeForeground
               }
             }
 
@@ -1134,7 +1378,7 @@ KeyboardPanel {
                     Text {
                       Layout.alignment: Qt.AlignVCenter
                       text: root.aq.info ? root.aq.info.label : ""
-                      color: root.bar.foreground
+                      color: root.aq.info ? root.severityColor(root.aq.info.level) : root.bar.foreground
                       font.family: root.bar.fontFamily
                       font.pixelSize: Style.font.body
                       font.bold: true
@@ -1253,7 +1497,7 @@ KeyboardPanel {
                     Text {
                       anchors.horizontalCenter: parent.horizontalCenter
                       text: root.iconForOpenMeteoCode(modelData.code, false)
-                      color: root.bar.foreground
+                      color: root.colorForOpenMeteoCode(modelData.code, false)
                       font.family: root.bar.fontFamily
                       font.pixelSize: Style.font.title
                     }

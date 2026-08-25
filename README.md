@@ -14,10 +14,13 @@ and [wttr.in](https://wttr.in) — no API key, no account.
 |---------|-------|
 | **Current** | condition glyph, big temperature, location (click to search), feels-like / wind / precipitation chance |
 | **Metrics** | filled cells: wind (speed + compass arrow), humidity, pressure, UV index, air quality, sun (rise/set) — level bars on humidity / pressure / UV |
-| **Hourly** | six upcoming hours: time (NOW highlighted), condition glyph, temperature, precipitation probability, day MAX readout |
+| **Hourly** | six upcoming cells, every other hour by default (NOW highlighted): time, condition glyph, temperature, precipitation probability, day MAX readout |
 | **7-day** | one cell per day (today highlighted): condition, hi/lo |
 | **Air quality** | US AQI number with health category (Good → Hazardous) plus PM2.5 / PM10 |
 | **Location** | click the location label to search cities (Open-Meteo geocoding); empty commit returns to IP auto-detect |
+| **Color** | every condition has its own glyph color in the bar, hero, hourly and 7-day strips; UV and air quality tint by severity — on both light and dark themes (`colorIcon`) |
+| **Alerts** | active NWS watches and warnings (US), listed above the hero; a warning turns the bar pill urgent |
+| **Radar** | right-click the pill (or the panel's RADAR action) for the animated NWS radar loop |
 
 The panel uses the theme's popup surface, so it follows dark and light themes.
 Everything is metric or imperial aware (auto / metric / imperial, or per your
@@ -47,10 +50,18 @@ omarchy bar move io.github.howdyitskyle.weathering --section center
 
 ## Use
 
-Click the pill to open or close the panel. Press Escape to close it. Middle-click
-refreshes; right-click sends the current conditions as a notification. Inside
-the panel, click the location label (top right) to search for a city; pressing
-Escape or committing an empty search returns to automatic IP-based location.
+Click the pill to open or close the panel. Press Escape to close it.
+Middle-click refreshes; **right-click opens the radar loop** in mpv. Inside the
+panel, click the location label (top right) to search for a city; pressing
+Escape or committing an empty search returns to automatic IP-based location,
+and the RADAR action beside it opens the same loop as right-click.
+
+The pill shows the condition glyph and the current temperature, and every
+condition gets its own color: amber for clear sun, periwinkle for a clear
+night, pale gold for partly cloudy, blue-grey for overcast, grey for fog, light
+blue for showers, deeper blue for rain, violet for storms, pale cyan for sleet,
+and near-white for snow. Set `colorIcon` to `false` for a plain monochrome
+pill.
 
 Bind a key if you like, in `~/.config/hypr/bindings.lua` (Hyprland's
 bindings file — `bindd` is a superkey chord binding, so this one is
@@ -82,6 +93,12 @@ from your IP address.
 | `show7day` | `true` | show the 7-day forecast strip |
 | `showFeelsLike` | `true` | show the feels-like stat in the header |
 | `hourlyCells` | `6` | number of hourly forecast cells to show (3–6) |
+| `hourlyStep` | `2` | hours between hourly cells (1–6); 2 means six cells cover twelve hours |
+| `colorIcon` | `true` | tint the bar and hero glyphs by condition |
+| `showAlerts` | `true` | show active NWS alerts (US only) |
+| `alertNotifications` | `true` | notify on new severe warnings |
+| `alertsMinutes` | `5` | alert check interval, 1–30 min |
+| `radarStation` | `""` | NWS radar station id (e.g. `KTBW`); empty resolves it from your location |
 
 Settings are inline on the widget's bar-layout entry in
 `~/.config/omarchy/shell.json`. For example, to force imperial units, refresh
@@ -130,6 +147,19 @@ runs every `refreshMinutes` (even while the panel is closed) so the bar pill
 stays current. When a location is configured, the Open-Meteo forecast is the
 authoritative current-condition source; without one, wttr.in fills the hero.
 
+**The National Weather Service** (`api.weather.gov`, US only, no key) supplies
+two things: the radar station serving your coordinates, resolved once and
+cached, and active alerts. Alerts poll on their own `alertsMinutes` clock
+rather than with the forecast, since a warning is worth catching sooner than a
+temperature. The radar animation itself is an NWS RIDGE II loop
+(`radar.weather.gov`), opened in mpv rather than downloaded.
+
+A failed alert fetch leaves whatever is already on screen: an alert is only
+cleared by a response that successfully says nothing is active, never by a
+network error. NWS marks watches and warnings alike as `Severe`, so only
+warnings (and anything `Extreme`) turn the pill urgent or raise a notification
+— a watch is listed in the panel and otherwise stays quiet.
+
 ## Remove
 
 ```sh
@@ -148,8 +178,15 @@ rather than deleted, so you can recover it if needed.
 Omarchy plugins run as **unsandboxed code** inside your long-lived
 `omarchy-shell` process, with your user's permissions. Only install plugins you
 trust, and review the source before enabling. This plugin reads weather data
-from Open-Meteo and wttr.in over HTTPS and shares your location via
-`omarchy-weather-location` — it does not ship or run any external scripts.
+from Open-Meteo, wttr.in, and the National Weather Service over HTTPS and
+shares your location via `omarchy-weather-location`.
+
+It runs two commands on your behalf: `mpv` for the radar window, and
+`omarchy-notification-send` for alert notifications. Both go through a shell,
+so both are constructed carefully — a radar station id must be three or four
+letters before it is used, and alert text from the NWS is shell-quoted rather
+than trusted. No location, station, or coordinate is committed to this
+repository.
 
 ## License
 
