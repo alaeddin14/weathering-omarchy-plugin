@@ -290,15 +290,21 @@ function hourlyMaxTemp(hourly, useImperial) {
 
 // Next 24 hours of hourly data from the daily-forecast report (which now also
 // carries hourly fields). Each entry: time, tempC/tempF, precipProb, code, night.
-function hourlyForecast(report, nowIso) {
+// stepHours thins the strip so a fixed number of cells reaches further ahead:
+// at 2, six cells cover twelve hours instead of six. Counted from the first
+// upcoming hour, so the leading cell stays NOW.
+function hourlyForecast(report, nowIso, stepHours) {
   var hourly = report && report.hourly ? report.hourly : null
   if (!hourly || !hourly.time) return []
 
+  var step = Math.max(1, parseInt(String(stepHours), 10) || 1)
   var now = String(nowIso || "")
   var out = []
+  var upcoming = 0
   for (var i = 0; i < hourly.time.length && out.length < 24; i++) {
     var t = String(hourly.time[i] || "")
     if (t && now && t < now) continue
+    if (upcoming++ % step !== 0) continue
     var c = hourly.temperature_2m ? hourly.temperature_2m[i] : ""
     out.push({
       time: timeOf(t),
@@ -433,17 +439,35 @@ function dayIcon(day) {
   return iconForCode(best.weatherCode, false)
 }
 
-function iconForOpenMeteoCode(code, night) {
+// Open-Meteo WMO code to the WWO code the glyph and color tables are keyed by.
+// Split out of iconForOpenMeteoCode so condition color resolves through the
+// same mapping as the glyph and the two can never disagree.
+function wwoCodeForOpenMeteo(code) {
   var c = parseInt(String(code || "0"), 10)
-  if (c === 0) return iconForCode(113, night)
-  if (c === 1 || c === 2) return iconForCode(116, night)
-  if (c === 3) return iconForCode(119, night)
-  if (c === 45 || c === 48) return iconForCode(143, night)
-  if (c === 51 || c === 53 || c === 55 || c === 56 || c === 57 || c === 61) return iconForCode(266, night)
-  if (c === 63 || c === 65 || c === 66 || c === 67 || c === 80 || c === 81 || c === 82) return iconForCode(308, night)
-  if (c === 71 || c === 73 || c === 75 || c === 77 || c === 85 || c === 86) return iconForCode(338, night)
-  if (c === 95 || c === 96 || c === 99) return iconForCode(389, night)
-  return iconForCode(119, night)
+  if (c === 0) return 113
+  if (c === 1 || c === 2) return 116
+  if (c === 3) return 119
+  if (c === 45 || c === 48) return 143
+  if (c === 51 || c === 53 || c === 55 || c === 56 || c === 57 || c === 61) return 266
+  if (c === 63 || c === 65 || c === 66 || c === 67 || c === 80 || c === 81 || c === 82) return 308
+  if (c === 71 || c === 73 || c === 75 || c === 77 || c === 85 || c === 86) return 338
+  if (c === 95 || c === 96 || c === 99) return 389
+  return 119
+}
+
+function iconForOpenMeteoCode(code, night) {
+  return iconForCode(wwoCodeForOpenMeteo(code), night)
+}
+
+// Condition color for whichever current-condition source is authoritative,
+// mirroring currentIcon's branching so glyph and color always agree.
+function currentConditionColor(current, backgroundIsLight) {
+  if (!current) return ""
+  if (current.openMeteoWeatherCode !== undefined && current.openMeteoWeatherCode !== null)
+    return conditionColor(wwoCodeForOpenMeteo(current.openMeteoWeatherCode), Number(current.isDay) === 0, backgroundIsLight)
+  if (current.weatherCode !== undefined && current.weatherCode !== null)
+    return conditionColor(current.weatherCode, false, backgroundIsLight)
+  return ""
 }
 
 function iconForCode(code, night) {
@@ -463,6 +487,209 @@ function iconForCode(code, night) {
     default: return ""
   }
 }
+
+// Condition color for an Open-Meteo code, for the hourly and 7-day strips.
+function colorForOpenMeteoCode(code, night, backgroundIsLight) {
+  return conditionColor(wwoCodeForOpenMeteo(code), night, backgroundIsLight)
+}
+
+// Severity ramp shared by UV and AQI. Both publish official color scales
+// (WHO and EPA) whose exact values are unusable here — EPA "Hazardous" is a
+// near-black maroon that vanishes on a dark bar — so these keep the scales'
+// hue order (green, yellow, orange, red, violet, crimson) at luminances that
+// read on either surface. Every stop measures at least 4.6:1 against both.
+var SEVERITY_RAMP = [
+  { onDark: "#5fd08a", onLight: "#1c7a45" },
+  { onDark: "#e8d05a", onLight: "#7d6a10" },
+  { onDark: "#f0a45a", onLight: "#a35a10" },
+  { onDark: "#f07a7a", onLight: "#b02525" },
+  { onDark: "#c48af0", onLight: "#7038c4" },
+  { onDark: "#e0708f", onLight: "#8e1d3d" }
+]
+
+function severityColor(level, backgroundIsLight) {
+  var i = parseInt(String(level), 10)
+  if (isNaN(i)) return ""
+  i = Math.max(0, Math.min(SEVERITY_RAMP.length - 1, i))
+  return backgroundIsLight ? SEVERITY_RAMP[i].onLight : SEVERITY_RAMP[i].onDark
+}
+
+// ---- NWS active alerts ---------------------------------------------------
+
+// api.weather.gov severity, ranked. Unknown sorts with the lowest rather than
+// being dropped: an alert that fails to declare a severity is still an alert.
+var ALERT_SEVERITY_RANK = { extreme: 4, severe: 3, moderate: 2, minor: 1, unknown: 0 }
+var ALERT_NOTIFY_RANK = 3
+
+function alertSeverityRank(severity) {
+  var rank = ALERT_SEVERITY_RANK[String(severity || "").toLowerCase()]
+  return rank === undefined ? 0 : rank
+}
+
+// Alerts from an api.weather.gov/alerts/active response, worst first. Returns
+// null — distinct from an empty array — when the response could not be parsed,
+// so the caller can keep showing a warning rather than clear it on one bad
+// fetch. An empty array is a real "nothing active" answer.
+function parseAlerts(raw) {
+  var text = String(raw || "").replace(/^\s+|\s+$/g, "")
+  if (!text) return null
+  try {
+    var data = JSON.parse(text)
+    if (!data || !Array.isArray(data.features)) return null
+    var alerts = []
+    for (var i = 0; i < data.features.length; i++) {
+      var f = data.features[i]
+      var props = f && f.properties ? f.properties : null
+      if (!props) continue
+      alerts.push({
+        id: String(f.id || props.id || ""),
+        event: String(props.event || "Weather alert"),
+        headline: String(props.headline || props.areaDesc || ""),
+        severity: String(props.severity || "Unknown"),
+        rank: alertSeverityRank(props.severity),
+        ends: String(props.ends || props.expires || "")
+      })
+    }
+    alerts.sort(function(a, b) {
+      if (b.rank !== a.rank) return b.rank - a.rank
+      return (alertIsWarning(b) ? 1 : 0) - (alertIsWarning(a) ? 1 : 0)
+    })
+    return alerts
+  } catch (e) {
+    return null
+  }
+}
+
+function topAlertRank(alerts) {
+  return (alerts && alerts.length > 0) ? alerts[0].rank : 0
+}
+
+// NWS severity does not separate a watch from a warning: "Severe Thunderstorm
+// Watch" and "Severe Thunderstorm Warning" are both severity Severe. A watch
+// means conditions are favorable and is routine in storm season; a warning
+// means it is happening. Only the latter earns the urgent bar state and a
+// notification — otherwise the alert becomes background noise and stops being
+// read. Watches still appear in the panel.
+function alertIsWarning(alert) {
+  return !!alert && /warning/i.test(String(alert.event || ""))
+}
+
+function alertIsUrgent(alert) {
+  if (!alert) return false
+  if (alert.rank >= 4) return true
+  return alert.rank >= ALERT_NOTIFY_RANK && alertIsWarning(alert)
+}
+
+function alertIsNotifiable(alert) {
+  return alertIsUrgent(alert)
+}
+
+function hasUrgentAlert(alerts) {
+  if (!alerts) return false
+  for (var i = 0; i < alerts.length; i++) if (alertIsUrgent(alerts[i])) return true
+  return false
+}
+
+// Single-quote for bash -lc. Alert text is remote content that reaches a shell
+// command, so it is quoted rather than trusted.
+function shellQuote(value) {
+  return "'" + String(value === null || value === undefined ? "" : value).split("'").join("'\\''") + "'"
+}
+
+// "until 4:15 PM" for an ISO timestamp, empty when absent or unparseable.
+function alertEndsLabel(iso, now) {
+  if (!iso) return ""
+  var end = new Date(iso)
+  if (isNaN(end.getTime())) return ""
+  var reference = now || new Date()
+  var sameDay = end.toDateString() === reference.toDateString()
+  var time = end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+  return sameDay ? ("until " + time) : ("until " + end.toLocaleDateString(undefined, { weekday: "short" }) + " " + time)
+}
+
+
+// Condition color for the bar and hero glyphs. The shell is monochrome by
+// design — Color.qml exposes only foreground/accent/urgent/muted — so this is
+// a deliberate departure, and it restores what the old Waybar module had for
+// free: it drew conditions as emoji (sun, sun-behind-cloud, cloud, fog, sun-
+// behind-rain, rain, thunder, sleet, snowflake), which are full-color bitmaps,
+// so every condition was distinct at a glance including the calm ones. Every
+// family is colored here for the same reason.
+//
+// Two variants per family because a mid-tone that reads on a dark surface
+// washes out on a light one; every entry measures at least 3.9:1 against both
+// the stock dark and a light background. Hue carries the distinction, so the
+// calm states are low-saturation greys and the wet ones are saturated — rain
+// and showers sit close together on purpose, as do snow and sleet, since the
+// glyphs already separate them. Codes are WWO, matching iconForCode.
+var CONDITION_COLORS = {
+  clearDay:   { onDark: "#f0b24a", onLight: "#a86a00" },
+  clearNight: { onDark: "#b9c3e0", onLight: "#4a5480" },
+  partly:     { onDark: "#dbc389", onLight: "#8a6d1f" },
+  cloudy:     { onDark: "#9db0c2", onLight: "#455a6b" },
+  fog:        { onDark: "#96a0a3", onLight: "#566063" },
+  showers:    { onDark: "#7cc4f0", onLight: "#1f78b8" },
+  rain:       { onDark: "#4a95e8", onLight: "#14559e" },
+  storm:      { onDark: "#b48af5", onLight: "#7038c4" },
+  sleet:      { onDark: "#86d9e8", onLight: "#12707f" },
+  snow:       { onDark: "#cfe9f5", onLight: "#2f7186" }
+}
+
+// Families follow iconForCode's groupings, so color and glyph change together.
+function conditionFamily(code, night) {
+  var c = parseInt(String(code || "0"), 10)
+  switch (c) {
+    case 113: return night ? "clearNight" : "clearDay"
+    case 116: return "partly"
+    case 119: case 122: return "cloudy"
+    case 143: case 248: case 260: return "fog"
+    case 176: case 263: case 353: return "showers"
+    case 266: case 293: case 296: case 299: case 302: case 305: case 308:
+    case 356: case 359: return "rain"
+    case 200: case 386: case 389: case 392: case 395: return "storm"
+    case 179: case 227: case 230: case 323: case 326: case 368: return "snow"
+    case 329: case 332: case 335: case 338: case 371: return "snow"
+    case 182: case 185: case 281: case 284: case 311: case 314: case 317:
+    case 320: case 350: case 362: case 365: case 374: case 377: return "sleet"
+    // Unknown codes draw the cloud glyph, so they take the cloud color.
+    default: return "cloudy"
+  }
+}
+
+// Empty only when the caller has color turned off; every known condition has
+// a color, so the theme foreground is no longer a fallback anything reaches.
+function conditionColor(code, night, backgroundIsLight) {
+  var entry = CONDITION_COLORS[conditionFamily(code, night)]
+  if (!entry) return ""
+  return backgroundIsLight ? entry.onLight : entry.onDark
+}
+
+
+// NWS radar station id. Four letters for the contiguous US (KTBW), three for
+// some territories (TJUA). Anything else is rejected: the id is interpolated
+// into a shell command, so a bad setting must never reach it.
+function normalizedRadarStation(station) {
+  var s = String(station || "").replace(/^\s+|\s+$/g, "").toUpperCase()
+  return /^[A-Z]{3,4}$/.test(s) ? s : ""
+}
+
+// The station serving a point, from an api.weather.gov/points response.
+function parseRadarStation(raw) {
+  try {
+    var data = JSON.parse(String(raw || ""))
+    return normalizedRadarStation(data && data.properties ? data.properties.radarStation : "")
+  } catch (e) {
+    return ""
+  }
+}
+
+// NWS RIDGE II animated loop: basemap, county lines, and the last hour of
+// reflectivity already composited server-side.
+function radarLoopUrl(station) {
+  var id = normalizedRadarStation(station)
+  return id ? "https://radar.weather.gov/ridge/standard/" + id + "_loop.gif" : ""
+}
+
 
 if (typeof module !== "undefined") {
   module.exports = {
@@ -490,6 +717,24 @@ if (typeof module !== "undefined") {
     dayIcon: dayIcon,
     iconForOpenMeteoCode: iconForOpenMeteoCode,
     iconForCode: iconForCode,
+    normalizedRadarStation: normalizedRadarStation,
+    parseRadarStation: parseRadarStation,
+    radarLoopUrl: radarLoopUrl,
+    conditionFamily: conditionFamily,
+    conditionColor: conditionColor,
+    colorForOpenMeteoCode: colorForOpenMeteoCode,
+    severityColor: severityColor,
+    wwoCodeForOpenMeteo: wwoCodeForOpenMeteo,
+    currentConditionColor: currentConditionColor,
+    alertSeverityRank: alertSeverityRank,
+    parseAlerts: parseAlerts,
+    topAlertRank: topAlertRank,
+    alertIsNotifiable: alertIsNotifiable,
+    alertIsWarning: alertIsWarning,
+    alertIsUrgent: alertIsUrgent,
+    hasUrgentAlert: hasUrgentAlert,
+    shellQuote: shellQuote,
+    alertEndsLabel: alertEndsLabel,
     windDirectionLabel: windDirectionLabel,
     windDirectionName: windDirectionName,
     conditionLabel: conditionLabel,

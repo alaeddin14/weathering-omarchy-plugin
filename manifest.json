@@ -15,7 +15,7 @@
   },
   "barWidget": {
     "displayName": "Weathering",
-    "description": "Weather icon in the bar; click for current conditions, hourly and 7-day forecast, air quality and sun/moon times.",
+    "description": "Weather icon in the bar; click for current conditions, hourly and 7-day forecast, air quality and sun/moon times. Right-click for the radar loop.",
     "category": "Info",
     "allowMultiple": false,
     "defaultSection": "right",
@@ -28,14 +28,24 @@
       "showSun": true,
       "show7day": true,
       "showFeelsLike": true,
-      "hourlyCells": 6
+      "hourlyCells": 6,
+      "radarStation": "",
+      "colorIcon": true,
+      "showAlerts": true,
+      "alertNotifications": true,
+      "alertsMinutes": 5,
+      "hourlyStep": 2
     },
     "schema": [
       {
         "key": "unit",
         "type": "enum",
         "label": "Units",
-        "options": ["auto", "metric", "imperial"],
+        "options": [
+          "auto",
+          "metric",
+          "imperial"
+        ],
         "defaultValue": "auto",
         "description": "Temperature and wind units. Auto follows your locale and country."
       },
@@ -88,6 +98,37 @@
         "defaultValue": true
       },
       {
+        "key": "colorIcon",
+        "type": "boolean",
+        "label": "Color the condition icon",
+        "defaultValue": true,
+        "description": "Tint the bar and hero glyphs by condition (sun, rain, storm, snow). Off keeps them the theme foreground."
+      },
+      {
+        "key": "showAlerts",
+        "type": "boolean",
+        "label": "Show weather alerts",
+        "defaultValue": true,
+        "description": "Active NWS watches and warnings for your location (US only)."
+      },
+      {
+        "key": "alertNotifications",
+        "type": "boolean",
+        "label": "Notify on severe alerts",
+        "defaultValue": true,
+        "description": "Send a desktop notification for new Severe and Extreme alerts."
+      },
+      {
+        "key": "alertsMinutes",
+        "type": "integer",
+        "label": "Alert check interval (minutes)",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 5,
+        "description": "How often to check for active alerts."
+      },
+      {
         "key": "hourlyCells",
         "type": "integer",
         "label": "Hourly cells",
@@ -96,6 +137,23 @@
         "step": 1,
         "defaultValue": 6,
         "description": "How many hourly forecast cells to show (3-6)."
+      },
+      {
+        "key": "hourlyStep",
+        "type": "integer",
+        "label": "Hours between cells",
+        "min": 1,
+        "max": 6,
+        "step": 1,
+        "defaultValue": 2,
+        "description": "Spacing between hourly cells. 2 shows every other hour, so six cells cover twelve."
+      },
+      {
+        "key": "radarStation",
+        "type": "string",
+        "label": "Radar station",
+        "defaultValue": "",
+        "description": "NWS radar station id (e.g. KTBW). Leave empty to resolve it from your location."
       }
     ]
   }

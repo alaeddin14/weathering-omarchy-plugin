@@ -28,6 +28,9 @@ Rectangle {
   property real pad: Style.space(10)
   // Right-side value font size; overridable so a card can match its neighbours.
   property int valuePixelSize: Style.font.title
+  // Value tint; a card with a severity scale (UV, air quality) overrides it so
+  // the reading itself carries the level, not only the bar under it.
+  property color valueColor: foreground
 
   radius: Math.min(4, Style.cornerRadius)
   color: Qt.rgba(card.foreground.r, card.foreground.g, card.foreground.b, 0.05)
@@ -89,7 +92,7 @@ Rectangle {
         Text {
           id: valText
           text: card.value
-          color: card.foreground
+          color: card.valueColor
           font.family: card.fontFamily
           font.pixelSize: card.valuePixelSize
           font.bold: true

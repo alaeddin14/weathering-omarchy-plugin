@@ -17,7 +17,11 @@ permissions.
   contract Quattro's panel routing requires (`open`/`close`/`opened`/
   `popoutSwitchClosing`/`closeForPopoutSwitch`), forwarding each to the loaded
   panel. `injectPanel()` hands `bar`/`settings`/`anchorItem`/`hostWidget` to it.
-  Right-click sends a notification via `omarchy-weather-status`; middle-click refreshes.
+  Right-click opens the radar loop; middle-click refreshes. The pill is a
+  `WidgetButton` hosting a `Grid` of condition glyph + temperature (not a
+  `BarIconButton`, whose single square optical canvas cannot hold two text
+  sizes); the Grid stacks on a vertical bar. `glyph`/`temp`/`glyphColor`/
+  `alertUrgent` are read off the panel so pill and hero never disagree.
 - `Panel.qml` — details panel, rclone-style sectioned layout: the built-in
   weather hero (64px glyph + 56px temp, location click-to-edit, FEELS/WIND/
   PRECIP stats), then `PanelSectionHeader` sections for the hourly strip (six
@@ -26,11 +30,15 @@ permissions.
   the KeyboardPanel paints the theme popup surface (`Color.popups.background`)
   so the panel follows dark and light themes. Cell wash is a foreground alpha:
   0.05 for the metric/AQ/Sun cards and non-highlighted strip cells, 0.1 for NOW
-  /today. Fetches with `curl` via
+  /today. An ALERTS section sits above the hero, visible only when something is
+  active. Fetches with `curl` via
   Quickshell `Process` blocks. Sets `manageIpc: false` and registers its own
   `IpcHandler` (target = `ipcTarget`).
-- `Model.js` — pure JS helpers (parsing, unit conversion, weather-code → glyph, wind
-  direction, UV/AQI bucketing). Imported as `import "Model.js" as Model`; also has a
+- `Model.js` — pure JS helpers (parsing, unit conversion, weather-code → glyph and
+  color, wind direction, UV/AQI bucketing, radar station, NWS alerts).
+  `wwoCodeForOpenMeteo` is the single WMO → WWO mapping behind both
+  `iconForOpenMeteoCode` and `currentConditionColor`, so glyph and color cannot
+  drift apart. Imported as `import "Model.js" as Model`; also has a
   guarded `module.exports` for standalone use. Not a `.pragma library`.
 - `MetricCard.qml` — row-style metric cell (label + desc left, value + unit right,
   thin theme-accent level bar / wind arrow). Its `arrowAngle` points the direction
@@ -53,6 +61,17 @@ All from free, keyless services:
 - `geocoding-api.open-meteo.com/v1/search` — city search in the panel.
 - `wttr.in` — current condition + auto-location fallback, exactly like the built-in
   `omarchy.weather`.
+- `api.weather.gov/points/<lat>,<lon>` — radar station for the location (needs `-L`;
+  it 301s coordinates to its own reduced precision). Resolved once, cached for the
+  shell's lifetime, overridden by the `radarStation` setting.
+- `api.weather.gov/alerts/active?point=<lat>,<lon>` — active alerts, on their own
+  `alertsMinutes` timer rather than `refreshMinutes`. US-only; elsewhere it simply
+  returns nothing.
+- `radar.weather.gov/ridge/standard/<STATION>_loop.gif` — the animated loop, opened
+  in mpv, never downloaded.
+
+Both NWS endpoints send a `User-Agent` identifying the plugin, which the service asks
+of unauthenticated clients. Keep it plugin identity only — no address, no hostname.
 
 Two current-condition sources, selected by `hasConfiguredCoordinates`: with stored
 coordinates, Open-Meteo's current (bundled with the fast daily forecast) is
@@ -86,7 +105,8 @@ Read from the bar layout entry in `~/.config/omarchy/shell.json` via `setting(ke
 default)` — settings are inline on the entry, no per-plugin config file. Keys and
 defaults come from the manifest `barWidget.schema`/`defaults` (`unit`, `refreshMinutes`,
 `showHourly`, `showAirQuality`, `showMetrics`, `showSun`, `show7day`,
-`showFeelsLike`, `hourlyCells`).
+`showFeelsLike`, `hourlyCells`, `hourlyStep`, `colorIcon`, `showAlerts`,
+`alertNotifications`, `alertsMinutes`, `radarStation`).
 
 ## Dev loop
 
@@ -94,6 +114,10 @@ defaults come from the manifest `barWidget.schema`/`defaults` (`unit`, `refreshM
 - Installed copy: `~/.config/omarchy/plugins/io.github.howdyitskyle.weathering/`
   (copy files there; saving under the folder hot-reloads).
 - Force discovery: `omarchy-shell shell rescanPlugins`; status: `omarchy plugin list --json`.
+- **`rescanPlugins` is not enough for a QML change.** It reloads the plugin registry,
+  not the compiled component, so an edited `BarWidget.qml` keeps rendering the old
+  pill however many times it is rescanned — with no error in the log to say so. Use
+  `omarchy restart shell` and re-check, before concluding a change had no effect.
 - Validate: `omarchy plugin validate <plugin-folder>` and
   `qmllint -I "$OMARCHY_PATH/shell" <plugin-folder>/BarWidget.qml <plugin-folder>/Panel.qml`.
 - Shell log: `qs log -p "$OMARCHY_PATH/shell" --tail 100`.
@@ -119,3 +143,55 @@ defaults come from the manifest `barWidget.schema`/`defaults` (`unit`, `refreshM
 - `qmllint` in this repo's environment (v1.0, a minimal verifier) rejects the
   `: void` return-type annotations used on `IpcHandler` methods; ignore that
   false positive and keep the annotations (they match the built-in plugins).
+## Alerts
+
+Two rules that look like details and are not:
+
+- `parseAlerts` returns `null` for an unparseable response and `[]` for a real
+  "nothing active", and `applyAlerts` ignores `null`. An alert is cleared only by a
+  response that says so, never by a dropped packet — a stale warning on screen beats
+  a real one silently disappearing.
+- NWS severity does not distinguish a watch from a warning: "Severe Thunderstorm
+  Watch" and "Severe Thunderstorm Warning" are both `Severe`. `alertIsUrgent`
+  requires a warning (or `Extreme`) before the bar goes urgent or a notification
+  fires; watches are listed in the panel and otherwise stay quiet. Ranking on
+  severity alone made storm season a daily false alarm.
+
+Notifications are primed on the first successful fetch (`alertsPrimed`), so
+restarting the shell during an active warning does not re-announce it.
+
+Alert text and the radar station id both reach a `bash -lc` command. The station is
+validated (`normalizedRadarStation`, 3-4 letters) and alert text is shell-quoted
+(`shellQuote`). Keep it that way.
+
+## Condition color
+
+The shell is monochrome by design — `Color.qml` exposes only `foreground`, `accent`,
+`urgent`, and `muted` — so `conditionColor` is a deliberate departure. It restores
+what the Waybar module this replaced got for free: that one drew conditions as emoji,
+which are full-color bitmaps, so every condition was distinct at a glance. Every
+family is colored here for the same reason, calm states included; nothing falls back
+to the theme foreground while `colorIcon` is on.
+
+Ten families, following `iconForCode`'s groupings so color and glyph always change
+together, each with a dark-surface and a light-surface variant — a mid-tone that
+reads on one washes out on the other. Every entry measures at least 3.9:1 against
+both the stock dark background and a light one. Hue carries the distinction: calm
+states are low-saturation greys, wet ones saturated. Rain sits close to showers and
+snow close to sleet on purpose — they are semantically adjacent and their glyphs
+already separate them. Gated behind `colorIcon`.
+
+An active severe warning still overrides the condition color with the theme
+`urgent`, so a warning never reads as just another condition.
+
+The same color runs through the hero glyph, the hourly strip, and the 7-day strip, so
+one condition looks the same everywhere it appears.
+
+`severityColor` is a separate six-stop ramp shared by UV and air quality. Both scales
+publish official colors (WHO and EPA) whose exact values are unusable here — EPA
+"Hazardous" is a near-black maroon that disappears on a dark bar — so the ramp keeps
+their hue order (green, yellow, orange, red, violet, crimson) at luminances that read
+on either surface, at 4.6:1 or better. It tints the reading itself, not only the bar
+under it, via `MetricCard.valueColor`. Wind, humidity, and pressure keep the theme
+accent: they have no severity scale, and inventing one would make the color mean
+nothing.
